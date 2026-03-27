@@ -64,7 +64,7 @@ paths:
                   summary: Не указаны данные отправителя (Consignor)
                   value:
                    - Consignor object is missed
-                example6:
+                example7:
                   summary: Изменения по заявке запрещены
                   value:
                    - Changes for UID fb80d008-c01d-43c0-aab6-ab7f73c3ebf4 are prohibited
