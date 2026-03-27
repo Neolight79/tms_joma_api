@@ -1,0 +1,406 @@
+openapi: 3.0.3
+info:
+  title: API заявки на перевозку
+  version: 1.1.0
+  description: API запрос создания или изменения заявки на перевозку
+
+servers:
+  - url: https://api.rhenus-fl.ru/WMS_API/hs/TMSAPI/V01
+
+paths:
+  /CreateOrder:
+    post:
+      summary: Создание или обновление заявки
+      description: Создает новую заявку или обновляет существующую
+      operationId: createOrUpdateOrder
+
+      security:
+        - basicAuth: [] 
+
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrderCreateOrUpdateRequest'
+
+      responses:
+        '200':
+          description: Успешно обработано
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderCreateOrUpdateResponse'
+
+        '400':
+          description: Ошибка обработки
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /GetStatusOrder:
+    get:
+      summary: Получение текущего статуса по завке на перевозку
+      description: Выдает информацию по текущему статусу перевозки
+      operationId: getOrderStatus
+
+      security:
+        - basicAuth: [] 
+
+      parameters:
+        - name: UID
+          in: query
+          description: Уникальный идентификатор заявки по которому необходимо вернуть информацию о статусе
+          required: true
+          schema:
+            type: string
+            format: uuid
+
+      responses:
+        '200':
+          description: Статус получен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderStatusResponse'
+
+        '400':
+          description: Ошибка получения статуса
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    basicAuth: 
+      type: http
+      scheme: basic
+      description: HTTP Basic Authentication.
+
+  schemas:
+
+    # =====================
+    # REQUEST
+    # =====================
+
+    OrderCreateOrUpdateRequest:
+      type: object
+      description: Запрос передает необходимые данные для заявки на перевозку. В случае, если заявка находится в статусе, разрешающем внесение изменений, то повторная отправка заявки позволяет внести изменения в существующую, требуется совпадение UID.
+      required:
+        - UID
+        - Consignor
+        - Consignee
+        - Packages
+      properties:
+        UID:
+          type: string
+          format: uuid
+          description: Уникальный идентификатор заявки. Формируется инициатором запроса. При совпадении с существующим происходит попытка обновления данных, если установлен соответствующий режим.
+
+        Consignor:
+          $ref: '#/components/schemas/Party'
+
+        Consignee:
+          $ref: '#/components/schemas/Party'
+
+        Documents:
+          type: array
+          description: Перечень товаро-сопроводительных документов, связанных с перевозкой и грузом.
+          items:
+            $ref: '#/components/schemas/Document'
+
+        DateTerms:
+          $ref: '#/components/schemas/DateTerms'
+
+        Packages:
+          type: array
+          description: Перечень грузовых мест.
+          items:
+            $ref: '#/components/schemas/Package'
+
+        Insurance:
+          type: boolean
+          description: Признак необходимости страхования груза.
+
+        Value:
+          type: number
+          description: Объявленная ценность груза по всей перевозке.
+          format: double
+
+        CurrencyIso4217:
+          type: string
+          description: Валюта, в которой объявленна ценность груза.
+          example: RUB
+
+        Priority:
+          type: string
+          description: Приоритет перевозки.
+          enum:
+            - High        # Высокий приоритет
+            - Normal      # Средний приоритет
+            - Low         # Низкий приоритет
+
+        Comment:
+          type: string
+
+    Party:
+      type: object
+      description: Объект, описывающий контрагента, используется как для описания отправителя, так и получателя груза.
+      required:
+        - Name
+        - City
+        - Address
+        - Contacts
+      properties:
+        Id:
+          type: string
+          description: Идентификатор контрагента в системе заказчика.
+        Name:
+          type: string
+          description: Наименование юридического лица.
+        City:
+          type: string
+          description: Город местонахождения груза или адреса доставки.
+        PostCode:
+          type: string
+          description: Почтовый индекс.
+        AddressId:
+          type: string
+          description: Идентификатор адреса в системе заказчика.
+        Address:
+          type: string
+          description: Адрес получения или доставки груза.
+        INN:
+          type: string
+          description: ИНН контрагента.
+        Comment:
+          type: string
+        Contacts:
+          type: array
+          description: Перечень контактных данных представителей контрагента.
+          items:
+            $ref: '#/components/schemas/Contact'
+
+    Contact:
+      type: object
+      description: Контактные данные представителя отправителя или получателя груза.
+      required:
+        - Person
+        - Phone
+      properties:
+        Id:
+          type: string
+          description: Идентификатор контактных данных в системе заказчика.
+        Person:
+          description: ФИО и прочая информация для обращения к контакту.
+          type: string
+        Phone:
+          description: Контактный телефон.
+          type: string
+        Email:
+          description: Адрес электронной почты контакта.
+          type: string
+          format: email
+        Notifications:
+          description: Признак разрешения отправки оповещений данному контакту.
+          type: boolean
+        Primary:
+          description: Признак основного контаткта, если в перечне указано несколько.
+          type: boolean
+
+    Document:
+      type: object
+      description: Описывает одну единицу из перечня товаро-сопроводительных документов.
+      required:
+        - Type
+        - Number
+      properties:
+        Type:
+          type: string
+          description: Тип документа, выбирается из фиксированного перечня - УПД, ТН, ТТН, ТОРГ12, санитарный паспорт.
+          enum:
+            - UPD         # УПД
+            - TN          # Транспортная накладная
+            - TTN         # Товарно-Транспортная накладная
+            - Torg12      # Товарная накладная УФ №Торг-12
+            - SaniPass    # Санитарный паспорт
+        Number:
+          type: string
+          description: Номер или идентификатор документа.
+        Date:
+          type: string
+          description: Дата документа, если применимо.
+          format: date-time
+        Return:
+          type: boolean
+          description: Признак необходимости возврата экземпляра документа.
+
+    DateTerms:
+      type: object
+      description: Описывает требования к срокам доставки.
+      required:
+        - TimeSlot
+      properties:
+        EnableRDD:
+          type: boolean
+          description: Признак требований RDD (Requested Delivery Date) - доставка с требованиями по дате и времени. 
+        RDD:
+          type: string
+          description: Дата и время для требований RDD. 
+          format: date-time
+        TimeWindow:
+          type: string
+          description: Выбор типа требований для RDD - не раньше указанной даты, не позже указанной даты, точно в указанную дату, согласно временному окну в реквизите TimeSlot. 
+          enum:
+            - NotEarlier  # Не ранее даты RDD
+            - NotLater    # Не позднее даты RDD
+            - Exact       # Точно к моменту RDD
+            - TimeSlot    # В дату RDD, но в рамках временного окна в реквизите TimeSlot
+        TimeSlot:
+          type: string
+          description: Временное окно, в которое получатель может принять груз, можно указывать в свободной форме, данные получает водитель. 
+
+    Package:
+      type: object
+      description: Описание грузового места.
+      required:
+        - GoodsDescription
+        - WeightKg
+        - PackageType
+      properties:
+        BoxId:
+          type: string
+          description: Штрихкод или уникальный идентификатор грузового места. Может быть SSCC кодом короба/паллеты, или иным идентификатором. Главное, чтобы код был уникальным и его можно было прочитать человеку, либо отсканировать сканером ШК.
+        GoodsDescription:
+          type: string
+          description: Описание содержимого грузового места. 
+        WeightKg:
+          type: number
+          description: Вес грузового места в киллограммах. 
+        VolumeCbm:
+          type: number
+          description: Объем грузового места в кубических метрах. 
+        WidthCm:
+          type: number
+          description: Ширина грузового места в сантиметрах. 
+        HeightCm:
+          type: number
+          description: Высота грузового места в сантиметрах. 
+        LengthCm:
+          type: number
+          description: Длина грузового места в сантиметрах. 
+        PackageType:
+          type: string
+          description: Тип грузвого места. Возможен выбор - паллета, короб, мешок. 
+          enum:
+            - PAL  # Паллета
+            - BOX  # Короб
+            - PACK # Мешок, пакет
+        ThermalMode:
+          type: boolean
+          description: Признак необходимости температурного режима. 
+        DangerGoods:
+          type: boolean
+          description: Признак опасного груза. 
+        FragileGoods:
+          type: boolean
+          description: Признак хрупкого груза. 
+        NumberOfPackages:
+          type: integer
+          description: Количество идентичных единиц описанного грузового места. 
+
+    # =====================
+    # RESPONSE
+    # =====================
+
+    OrderCreateOrUpdateResponse:
+      type: object
+      description: Ответ возвращает статус получения запроса, а также отметку времени и уникальный идентификатор принятой или обновленной заявки.
+      required:
+        - UID
+        - Result
+        - Date
+      properties:
+        UID:
+          type: string
+          description: Возвращает уникальный идентификатор заявки, которая была обработана.
+          format: uuid
+
+        Result:
+          type: string
+          description: Возвращает статус обработки полученной заявки - Принята, Обновлена
+          enum:
+            - Received        # заявка принята
+            - Updated         # заявка обновлена
+
+        Date:
+          type: string
+          description: Возвращает дату и время момента обработки заявки на сервере
+          format: date-time
+
+        Comment:
+          type: string
+
+    # ==========================
+    # RESPONSE FOR ORDER STATUS
+    # ==========================
+
+    OrderStatusResponse:
+      type: object
+      description: Ответ возвращает статус заявки на перевозку, УИД которой был передан в параметре
+      required:
+        - UID
+        - Status
+        - LastStatusSet
+        - Comment
+      properties:
+        UID:
+          type: string
+          description: Возвращает уникальный идентификатор заявки, по которой запрошен статус.
+          format: uuid
+
+        Status:
+          type: string
+          description: Возвращает актуальный статус обработки заявки
+          enum:
+            - Received         # заявка принята
+            - NeedsCorrections # ожидает изменений, детали в поле Comment
+            - Pending          # ожидает обработки
+            - Approved         # заявка одобрена
+            - PickingUp        # груз в процессе забора от отправителя
+            - OnTheWay         # груз в пути
+            - Arrived          # груз прибыл получателю
+            - Delivered        # груз передан получателю
+            - Completed        # заявка завершена, документооборот завершен
+            - Problem          # возникла проблема, детали в поле Comment
+            - Cancelled        # заявка отменена, детали в поле Comment
+            - Delayed          # заявка задерживается, на паузе, детали в поле Comment
+
+        LastStatusSet:
+          type: string
+          description: Возвращает дату и время установки текущего статуса
+          format: date-time
+
+        Comment:
+          type: string
+
+    # ===============
+    # ERROR RESPONSE 
+    # ===============
+    ErrorResponse:
+      type: object
+      description: Описание ошибки
+      required:
+        - Error
+        - UID
+      properties:
+        Error:
+          type: string
+          description: Описание возникшей ошибки
+
+        UID:
+          type: string
+          description: UID заявки, если он известен.
+          format: uuid
